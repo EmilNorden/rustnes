@@ -1,3 +1,5 @@
+
+#[derive(Clone, Debug)]
 pub struct CPURegisters {
     accumulator: u8,
     x: u8,

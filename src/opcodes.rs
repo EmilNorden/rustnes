@@ -17,6 +17,8 @@ pub(crate) fn brk_implied(regs: &mut CPURegisters, mem: &mut RamController) -> i
     push_stack(regs, mem, (regs.pc() & 0xFF) as u8);
     push_stack(regs, mem, ((regs.pc() >> 8) & 0xFF) as u8);
 
+    print!("        ");
+
     // From the nesdev wiki:
     // In the byte pushed, bit 5 is always set to 1, and bit 4 is 1 if from an
     // instruction (PHP or BRK) or 0 if from an interrupt line being pulled low
@@ -106,6 +108,8 @@ pub(crate) fn asl_accumulator(regs: &mut CPURegisters) -> i32 {
     regs.set_flag_if(CPUFlags::Carry, (regs.accumulator() & 0x80) == 0x80);
     regs.set_accumulator(regs.accumulator() << 1);
 
+    print!("        ");
+
     2
 }
 
@@ -142,6 +146,8 @@ pub(crate) fn pla_implied(regs: &mut CPURegisters, mem: &RamController) -> i32 {
     let value = pop_stack(regs, mem);
     regs.set_accumulator(value);
 
+    print!("        ");
+
     4
 }
 
@@ -149,8 +155,10 @@ pub(crate) fn rts_implied(regs: &mut CPURegisters, mem: &RamController) -> i32 {
     let low = pop_stack(regs, mem);
     let high = pop_stack(regs, mem);
 
-    let address = low as u16 | (((high as u16) << 8) + 1);
-    regs.set_pc(address);
+    print!("        ");
+
+    let address = low as u16 | ((high as u16) << 8);
+    regs.set_pc(address + 1);
 
     6
 }
@@ -232,6 +240,8 @@ pub(crate) fn adc_indirect_y(regs: &mut CPURegisters, mem: &RamController) -> i3
 pub(crate) fn sei_implied(regs: &mut CPURegisters) -> i32 {
     regs.set_flag(CPUFlags::InterruptDisable);
 
+    print!("        ");
+
     2
 }
 
@@ -262,6 +272,8 @@ pub(crate) fn bne_relative(regs: &mut CPURegisters, mem: &RamController) -> i32 
 
 pub(crate) fn cld_implied(regs: &mut CPURegisters) -> i32 {
     regs.clear_flag(CPUFlags::ClearDecimalMode);
+
+    print!("        ");
 
     2
 }
@@ -417,11 +429,15 @@ pub(crate) fn sty_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> 
 pub(crate) fn tay_implied(regs: &mut CPURegisters) -> i32 {
     regs.set_y(regs.accumulator());
 
+    print!("        ");
+
     2
 }
 
 pub(crate) fn tax_implied(regs: &mut CPURegisters) -> i32 {
     regs.set_x(regs.accumulator());
+
+    print!("        ");
 
     2
 }
@@ -429,11 +445,15 @@ pub(crate) fn tax_implied(regs: &mut CPURegisters) -> i32 {
 pub(crate) fn tsx_implied(regs: &mut CPURegisters) -> i32 {
     regs.set_x(regs.stack() as u8);
 
+    print!("        ");
+
     2
 }
 
 pub(crate) fn txs_implied(regs: &mut CPURegisters) -> i32 {
     regs.set_stack(regs.x().into());
+
+    print!("        ");
 
     2
 }
@@ -441,11 +461,15 @@ pub(crate) fn txs_implied(regs: &mut CPURegisters) -> i32 {
 pub(crate) fn txa_implied(regs: &mut CPURegisters) -> i32 {
     regs.set_accumulator(regs.x());
 
+    print!("        ");
+
     2
 }
 
 pub(crate) fn tya_implied(regs: &mut CPURegisters) -> i32 {
     regs.set_accumulator(regs.y());
+
+    print!("        ");
 
     2
 }
@@ -524,7 +548,7 @@ pub(crate) fn sax_zero_page(regs: &mut CPURegisters, mem: &mut RamController) ->
     let address = mode::zero_page(regs, mem);
     sax(regs, mem, address);
 
-    6
+    3
 }
 
 pub(crate) fn sax_zero_page_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
@@ -613,6 +637,8 @@ pub(crate) fn bpl_relative(regs: &mut CPURegisters, mem: &RamController) -> i32 
 pub(crate) fn clc_implied(regs: &mut CPURegisters) -> i32 {
     regs.clear_flag(CPUFlags::Carry);
 
+    print!("        ");
+
     2
 }
 
@@ -660,6 +686,8 @@ pub(crate) fn rol_accumulator(regs: &mut CPURegisters) -> i32 {
     regs.set_flag_if(CPUFlags::Carry, (regs.accumulator() & 0x80) == 0x80);
 
     regs.set_accumulator(result);
+
+    print!("        ");
 
     2
 }
@@ -715,6 +743,8 @@ pub(crate) fn ror_accumulator(regs: &mut CPURegisters) -> i32 {
     regs.set_flag_if(CPUFlags::Carry, (regs.accumulator() & 1) == 1);
 
     regs.set_accumulator(result);
+
+    print!("        ");
 
     2
 }
@@ -837,11 +867,15 @@ pub(crate) fn bmi_relative(regs: &mut CPURegisters, mem: &RamController) -> i32 
 pub(crate) fn sec_implied(regs: &mut CPURegisters) -> i32 {
     regs.set_flag(CPUFlags::Carry);
 
+    print!("        ");
+
     2
 }
 
 pub(crate) fn pha_implied(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     push_stack(regs, mem, regs.accumulator());
+
+    print!("        ");
 
     3
 }
@@ -850,6 +884,8 @@ pub(crate) fn lsr_accumulator(regs: &mut CPURegisters) -> i32 {
     let old_value = regs.accumulator();
     regs.set_flag_if(CPUFlags::Carry, (old_value & 1) == 1);
     regs.set_accumulator(old_value >> 1);
+
+    print!("        ");
 
     2
 }
@@ -935,11 +971,15 @@ pub(crate) fn bvs_relative(regs: &mut CPURegisters, mem: &RamController) -> i32 
 pub(crate) fn cli_implied(regs: &mut CPURegisters) -> i32 {
     regs.clear_flag(CPUFlags::InterruptDisable);
 
+    print!("        ");
+
     2
 }
 
 pub(crate) fn clv_implied(regs: &mut CPURegisters) -> i32 {
     regs.clear_flag(CPUFlags::Overflow);
+
+    print!("        ");
 
     2
 }
@@ -948,7 +988,7 @@ fn cmp(regs: &mut CPURegisters, register_value: u8, value: u8) {
     regs.set_flag_if(CPUFlags::Carry, register_value >= value);
     regs.set_flag_if(CPUFlags::Zero, register_value == value);
 
-    let result = register_value - value;
+    let result = register_value.wrapping_sub(value);
     regs.set_flag_if(CPUFlags::Sign, (result & CPUFlags::Sign as u8) == CPUFlags::Sign as u8);
 }
 
@@ -970,7 +1010,7 @@ pub(crate) fn cmp_zero_page_x(regs: &mut CPURegisters, mem: &RamController) -> i
     let address = mode::zero_page_x(regs, mem);
     cmp(regs, regs.accumulator(), mem.read8(address));
 
-    3
+    4
 }
 
 pub(crate) fn cmp_absolute(regs: &mut CPURegisters, mem: &RamController) -> i32 {
@@ -1051,7 +1091,7 @@ pub(crate) fn cpy_absolute(regs: &mut CPURegisters, mem: &RamController) -> i32 
 }
 
 fn dec(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
-    let value = mem.read8(address) - 1;
+    let value = mem.read8(address).wrapping_sub(1);
     mem.write8(address, value);
 
     regs.set_flag_if(CPUFlags::Zero, value == 0);
@@ -1087,13 +1127,17 @@ pub(crate) fn dec_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -
 }
 
 pub(crate) fn dex_implied(regs: &mut CPURegisters) -> i32 {
-    regs.set_x(regs.x() - 1 );
+    regs.set_x(regs.x().wrapping_sub(1));
+
+    print!("        ");
 
     2
 }
 
 pub(crate) fn dey_implied(regs: &mut CPURegisters) -> i32 {
-    regs.set_y(regs.y() - 1 );
+    regs.set_y(regs.y().wrapping_sub(1));
+
+    print!("        ");
 
     2
 }
@@ -1165,11 +1209,13 @@ pub(crate) fn rti_implied(regs: &mut CPURegisters, mem: &RamController) -> i32 {
     let new_pc = pop_stack(regs, mem) as u16 | ((pop_stack(regs, mem) as u16) << 8);
     regs.set_pc(new_pc);
 
-    3
+    print!("        ");
+
+    6
 }
 
 fn inc(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
-    let value = mem.read8(address) + 1;
+    let value = mem.read8(address).wrapping_add(1);
     mem.write8(address, value);
 
     regs.set_flag_if(CPUFlags::Zero, value == 0);
@@ -1187,7 +1233,7 @@ pub(crate) fn inc_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) 
     let address = mode::zero_page_x(regs, mem);
     inc(regs, mem, address);
 
-    5
+    6
 }
 
 pub(crate) fn inc_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
@@ -1205,13 +1251,17 @@ pub(crate) fn inc_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -
 }
 
 pub(crate) fn inx_implied(regs: &mut CPURegisters) -> i32 {
-    regs.set_x(regs.x() + 1);
+    regs.set_x(regs.x().wrapping_add(1));
+
+    print!("        ");
 
     2
 }
 
 pub(crate) fn iny_implied(regs: &mut CPURegisters) -> i32 {
-    regs.set_y(regs.y() + 1);
+    regs.set_y(regs.y().wrapping_add(1));
+
+    print!("        ");
 
     2
 }
@@ -1274,10 +1324,14 @@ pub(crate) fn sbc_indirect_y(regs: &mut CPURegisters, mem: &RamController) -> i3
 pub(crate) fn sed_implied(regs: &mut CPURegisters) -> i32 {
     regs.set_flag(CPUFlags::ClearDecimalMode);
 
+    print!("        ");
+
     2
 }
 
 pub(crate) fn nop_implied() -> i32 {
+    print!("        ");
+
     2
 }
 
@@ -1633,6 +1687,8 @@ pub(crate) fn php_implied(regs: &mut CPURegisters, mem: &mut RamController) -> i
     // (/IRQ or /NMI)
     push_stack(regs, mem, regs.status() | CPUFlags::Unused as u8 | CPUFlags::BreakCommand as u8);
 
+    print!("        ");
+
     3
 }
 
@@ -1641,6 +1697,8 @@ pub(crate) fn plp_implied(regs: &mut CPURegisters, mem: &mut RamController) -> i
     let status = pop_stack(regs, mem);
 
     regs.set_status((status | CPUFlags::Unused as u8) & !(CPUFlags::BreakCommand as u8));
+
+    print!("        ");
 
     4
 }
@@ -1658,12 +1716,17 @@ mod addressing_mode
 
     pub(crate) fn immediate(regs: &mut CPURegisters, mem: &RamController) -> u16 {
         let address = regs.increment_pc();
-        mem.read8(address) as u16
+
+        print!("{:02X}      ", mem.read8(address));
+
+        address
     }
 
     pub(crate) fn absolute(regs: &mut CPURegisters, mem: &RamController) -> u16 {
         let low = mem.read8(regs.increment_pc());
         let high = mem.read8(regs.increment_pc());
+
+        print!("{:02X} {:02X}   ", low, high);
 
         low as u16 | ((high as u16) << 8)
     }
@@ -1673,11 +1736,13 @@ mod addressing_mode
         let mut low = mem.read8(regs.increment_pc());
         let mut high = mem.read8(regs.increment_pc());
 
-        low = low + index;
+        print!("{:02X} {:02X}   ", low, high);
+
+        low = low.wrapping_add(index);
 
         if low < index {
             page_boundary_crossed = true;
-            high = high + 1;
+            high = high.wrapping_add(1);
         }
 
         AddressingResult {
@@ -1687,24 +1752,34 @@ mod addressing_mode
     }
 
     pub(crate) fn zero_page(regs: &mut CPURegisters, mem: &RamController) -> u16 {
-        mem.read8(regs.increment_pc()) as u16
+        let address = mem.read8(regs.increment_pc());
+        print!("{:02X}      ", address);
+        address as u16
     }
 
     pub(crate) fn zero_page_x(regs: &mut CPURegisters, mem: &RamController) -> u16 {
-        (mem.read8(regs.increment_pc()) + regs.x()) as u16
+        let address = mem.read8(regs.increment_pc());
+        print!("{:02X}      ", address);
+        address.wrapping_add(regs.x()) as u16
     }
 
     pub(crate) fn zero_page_y(regs: &mut CPURegisters, mem: &RamController) -> u16 {
-        (mem.read8(regs.increment_pc()) + regs.y()) as u16
+        let address = mem.read8(regs.increment_pc());
+        print!("{:02X}      ", address);
+        address.wrapping_add(regs.y()) as u16
     }
 
     pub(crate) fn relative(regs: &mut CPURegisters, mem: &RamController) -> i8 {
-        mem.read8(regs.increment_pc()) as i8
+        let address = mem.read8(regs.increment_pc());
+        print!("{:02X}      ", address);
+        address as i8
     }
 
     pub(crate) fn indirect(regs: &mut CPURegisters, mem: &RamController) -> u16 {
         let low = mem.read8(regs.increment_pc());
         let high = mem.read8(regs.increment_pc());
+
+        print!("{:02X} {:02X}   ", low, high);
 
         let address = low as u16 | ((high as u16) << 8);
 
@@ -1724,22 +1799,26 @@ mod addressing_mode
 
     pub(crate) fn indexed_indirect(regs: &mut CPURegisters, mem: &RamController) -> u16 {
         let low = mem.read8(regs.increment_pc());
-        let zero_page_address = (low + regs.x()) as u16;
+        let zero_page_address = low.wrapping_add(regs.x()); // TODO: Should I do wrapping_add here?
 
-        mem.read8(zero_page_address) as u16 | ((mem.read8(zero_page_address + 1) as u16) << 8)
+        print!("{:02X}      ", low);
+
+        mem.read8(zero_page_address as u16) as u16 | ((mem.read8(zero_page_address.wrapping_add(1) as u16) as u16) << 8)
     }
 
     pub(crate) fn indirect_indexed(regs: &mut CPURegisters, mem: &RamController) -> AddressingResult {
         let zero_page_address = mem.read8(regs.increment_pc());
 
+        print!("{:02X}      ", zero_page_address);
+
         let mut low = mem.read8(zero_page_address as u16);
-        let mut high = mem.read8((zero_page_address + 1) as u16);
+        let mut high = mem.read8((zero_page_address.wrapping_add(1)) as u16); // TODO: Wrapping_add here?
 
         let mut page_boundary_crossed = false;
-        low = low + regs.y();
+        low = low.wrapping_add(regs.y());
         if low < regs.y() {
             page_boundary_crossed = true;
-            high = high + 1;
+            high = high.wrapping_add(1);
         }
 
         AddressingResult {

@@ -2,25 +2,26 @@ use crate::cpuregisters::{CPURegisters};
 use crate::ram_controller::RamController;
 use crate::opcodes;
 
-pub struct CPU {
-    registers: CPURegisters,
-    memory: RamController,
+pub struct CPU<'a> {
+    pub registers: CPURegisters,
+    memory: &'a mut RamController<'a>,
 }
 
-impl CPU {
-    pub(crate) fn new() -> CPU {
+impl<'a> CPU<'_> {
+    pub(crate) fn new(mem: &'a mut RamController<'a>) -> CPU<'a> {
         CPU {
-            memory: RamController::new(),
+            memory: mem,
             registers: CPURegisters::new()
         }
     }
-    fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.registers = CPURegisters::new();
         self.registers.set_pc(0xC000);
     }
 
     pub(crate) fn process_instruction(&mut self) -> i32 {
         let opcode = self.memory.read8(self.registers.increment_pc());
+        print!("{:02X} ", opcode);
         
         match opcode {
             0x00 => opcodes::brk_implied(&mut self.registers, &mut self.memory),

@@ -3,7 +3,7 @@ use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::error::Error;
 
 pub(crate) struct Cartridge {
-    prg_rom: Vec<PrgRomBank>
+    prg_rom_banks: Vec<PrgRomBank>
 }
 
 pub(crate) struct PrgRomBank {
@@ -28,18 +28,18 @@ impl Cartridge {
         }
 
         let prg_rom_bank_count = header[4];
-        let chr_rom_size = header[5] as i32 * 0x2000;
+        let _chr_rom_size = header[5] as i32 * 0x2000;
         let flags6 = header[6];
 
         let has_trainer_mask = 0b00000100;
 
         if (flags6 & has_trainer_mask) == has_trainer_mask {
             // There are 512 bytes of trainer data before the prg rom, so we skip past it for now
-            file.seek(SeekFrom::Current(512));
+            file.seek(SeekFrom::Current(512)).unwrap();
         }
 
         let mut prg_rom_banks = Vec::new();
-        for i in 0..prg_rom_bank_count {
+        for _ in 0..prg_rom_bank_count {
             let mut buffer = [0u8; 0x4000];
             file.read_exact(&mut buffer).unwrap();
 
@@ -47,8 +47,12 @@ impl Cartridge {
         }
 
         Cartridge {
-            prg_rom: prg_rom_banks
+            prg_rom_banks
         }
+    }
+
+    pub(crate) fn prg_rom_banks(&self) -> &Vec<PrgRomBank> {
+        &self.prg_rom_banks
     }
 }
 
