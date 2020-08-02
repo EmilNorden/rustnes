@@ -1,11 +1,10 @@
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct PPURegisters {
     ppuaddr: u16,
     ppuctrl: u8,
     ppumask: u8,
     oamaddr: u8,
-    oamdata: u8,
     ppuscroll_x: u8,
     ppuscroll_y: u8,
     ppustatus: u8,
@@ -20,7 +19,6 @@ impl PPURegisters {
             ppuctrl: 0,
             ppumask: 0,
             oamaddr: 0,
-            oamdata: 0,
             ppuscroll_x: 0,
             ppuscroll_y: 0,
             ppustatus: 0,
@@ -39,10 +37,6 @@ impl PPURegisters {
 
     pub fn set_oamaddr(&mut self, value: u8) {
         self.oamaddr = value;
-    }
-
-    pub fn set_oamdata(&mut self, value: u8) {
-        self.oamdata = value;
     }
 
     pub fn set_ppuscroll(&mut self, value: u8) {
@@ -67,6 +61,10 @@ impl PPURegisters {
         self.ppuaddr_toggle = !self.ppuaddr_toggle;
     }
 
+    pub fn oamaddr(&self) -> u8 {
+        self.oamaddr
+    }
+
     pub fn ppuaddr(&self) -> u16 {
         self.ppuaddr
     }
@@ -78,5 +76,26 @@ impl PPURegisters {
         else {
             self.ppuaddr += 1;
         }
+    }
+
+    pub fn set_vblank(&mut self) {
+        self.ppustatus |= 0b10000000;
+    }
+
+    fn clear_vblank(&mut self) {
+        self.ppustatus &= !0b10000000;
+    }
+
+    pub fn status(&mut self) -> u8 {
+        let result = self.ppustatus;
+        self.clear_vblank();
+        self.ppuscroll_toggle = false;
+        self.ppuaddr_toggle = false;
+
+        result
+    }
+
+    pub fn should_generate_nmi(&self) -> bool {
+        (self.ppuctrl & 0b10000000) == 0b10000000
     }
 }

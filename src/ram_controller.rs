@@ -1,8 +1,12 @@
 use crate::cartridge::PrgRomBank;
 use crate::ppu::PPU;
+use crate::ppu_registers::PPURegisters;
+use std::cell::{Cell, RefCell};
+use crate::vram_controller::VRAMController;
 
 pub struct RamController<'a> {
-    ppu: &'a mut PPU<'a>,
+    ppu_regs: &'a Cell<PPURegisters>,
+    vram: &'a RefCell<VRAMController>,
     memory: [u8; 0x10000],
 }
 
@@ -11,14 +15,17 @@ impl RamController<'_> {
     const PRG_BANK2_LOCATION: usize = 0xC000;
     const PRG_BANK_SIZE: usize = 0x4000;
 
-    pub fn new<'a>(ppu: &'a mut PPU<'a>) -> RamController<'a> {
+    pub fn new<'a>(ppu_regs: &'a Cell<PPURegisters>, vram: &'a RefCell<VRAMController>) -> RamController<'a> {
         RamController {
-            ppu,
-            memory: [0; 0x10000]
+            ppu_regs,
+            vram,
+            memory: [0; 0x10000],
         }
     }
     pub fn read8(&self, address: u16) -> u8 {
-        self.memory[self.translate_address(address)]
+        let translated_address = self.translate_address(address);
+
+        self.read_ppu_registers(address).unwrap_or(self.memory[translated_address])
     }
 
     pub fn read16(&self, address: u16) -> u16 {
@@ -32,10 +39,10 @@ impl RamController<'_> {
         self.memory[real_address] as u16 | ((self.memory[real_address + 1] as u16) << 8)
     }
 
-    pub fn write8(&mut self, address: u16, value: u8) {
+    pub fn write8(&mut self, address: u16, value: u8) -> i32 {
         self.memory[self.translate_address(address)] = value;
 
-        self.handle_ppu_registers(address, value);
+        self.write_ppu_registers(address, value)
     }
 
     pub(crate) fn load_prg_bank1(&mut self, rom: &PrgRomBank) {
@@ -68,17 +75,90 @@ impl RamController<'_> {
         address as usize
     }
 
-    fn handle_ppu_registers(&mut self, address: u16, value: u8) {
+    fn read_ppu_registers(&self, address: u16) -> Option<u8> {
         match address {
-            0x2000 => self.ppu.set_ppuctrl(value),
-            0x2001 => self.ppu.set_ppumask(value),
-            0x2003 => self.ppu.set_oamaddr(value),
-            0x2004 => self.ppu.set_oamdata(value),
-            0x2005 => self.ppu.set_ppuscroll(value),
-            0x2006 => self.ppu.set_ppuaddr(value),
-            0x2007 => self.ppu.ppu_data_write(value),
-            0x4014 => println!("OAM DMA!"),
-            _ => ()
+            0x2002 => {
+                let mut ppu_regs = self.ppu_regs.get();
+                let status = ppu_regs.status();
+                self.ppu_regs.set(ppu_regs);
+                Some(status)
+            },
+            0x2004 => {
+                Some(self.vram.read8(address))
+            },
+            0x2007 => {
+                let mut regs = self.ppu_regs.get();
+                let ppuaddr = regs.ppuaddr();
+                regs.increment_ppuaddr();
+                self.ppu_regs.set(regs);
+                Some(self.vram.read8(ppuaddr))
+            }
+            _ => None
+        }
+    }
+
+    fn write_ppu_registers(&mut self, address: u16, value: u8) -> i32 {
+        match address {
+            0x2000 => {
+                let mut regs = self.ppu_regs.get();
+                regs.set_ppuctrl(value);
+                self.ppu_regs.set(regs);
+
+                0
+            }
+            0x2001 => {
+                let mut regs = self.ppu_regs.get();
+                regs.set_ppumask(value);
+                self.ppu_regs.set(regs);
+
+                0
+            }
+            0x2003 => {
+                let mut regs = self.ppu_regs.get();
+                regs.set_oamaddr(value);
+                self.ppu_regs.set(regs);
+
+                0
+            },
+            0x2004 => {
+                let mut regs = self.ppu_regs.get();
+                self.vram.borrow_mut().write8(regs.oamaddr() as u16, value); // TODO: Where is OAM located? Right now I'm assuming it starts at address 0 which is probably wrong
+                regs.set_oamaddr(regs.oamaddr() + 1);
+                self.ppu_regs.set(regs);
+
+                0
+            }
+            0x2005 => {
+                let mut regs = self.ppu_regs.get();
+                regs.set_ppuscroll(value);
+                self.ppu_regs.set(regs);
+
+                0
+            }
+            0x2006 => {
+                let mut regs = self.ppu_regs.get();
+                regs.set_ppuaddr(value);
+                self.ppu_regs.set(regs);
+
+                0
+            }
+            0x2007 => {
+                let mut regs = self.ppu_regs.get();
+                self.vram.borrow_mut().write8(regs.ppuaddr(), value);
+                regs.increment_ppuaddr();
+                self.ppu_regs.set(regs);
+
+                0
+            }
+            0x4014 => {
+                let cpu_page_address = (value as usize) << 8;
+                let cpu_page= &self.memory[cpu_page_address..(cpu_page_address + 0xFF)];
+
+                self.vram.borrow_mut().write_oam_dma(self.ppu_regs.get().oamaddr(), cpu_page);
+
+                513
+            }
+            _ => 0
         }
     }
 }

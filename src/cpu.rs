@@ -1,6 +1,9 @@
 use crate::cpuregisters::{CPURegisters};
 use crate::ram_controller::RamController;
-use crate::opcodes;
+use crate::{opcodes, stack};
+
+const NMI_VECTOR: u16 = 0xFFFA;
+const RESET_VECTOR: u16 = 0xFFFC;
 
 pub struct CPU<'a> {
     pub registers: CPURegisters,
@@ -16,10 +19,27 @@ impl<'a> CPU<'_> {
     }
     pub(crate) fn reset(&mut self) {
         self.registers = CPURegisters::new();
-        self.registers.set_pc(0xC000);
+
+        let address = self.memory.read16(RESET_VECTOR);
+        self.registers.set_pc(address);
+
+        // Only used with nestest
+        // self.registers.set_pc(0xC000);
+    }
+
+    pub(crate) fn trigger_nmi(&mut self) {
+        let pc = self.registers.pc();
+        stack::push(&mut self.registers, &mut self.memory, (pc & 0xFF) as u8);
+        stack::push(&mut self.registers, &mut self.memory, ((pc >> 8) & 0xFF) as u8);
+
+        let address = self.memory.read16(NMI_VECTOR);
+        self.registers.set_pc(address);
     }
 
     pub(crate) fn process_instruction(&mut self) -> i32 {
+        if self.registers.pc() == 0xC03F {
+            let foo = 2;
+        }
         let opcode = self.memory.read8(self.registers.increment_pc());
         print!("{:02X} ", opcode);
         

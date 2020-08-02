@@ -4,7 +4,8 @@ use crate::ram_controller::RamController;
 use crate::cartridge::Cartridge;
 use crate::ppu_registers::PPURegisters;
 use crate::vram_controller::VRAMController;
-use crate::ppu::PPU;
+use crate::ppu::{PPU, PPUResult};
+use std::cell::{Cell, RefCell};
 
 mod cpu;
 mod cpuregisters;
@@ -14,15 +15,16 @@ mod cartridge;
 mod ppu_registers;
 mod vram_controller;
 mod ppu;
+mod stack;
 
 fn main()
 {
-    let mut vram = VRAMController::new();
-    let mut ppuregs = PPURegisters::new();
-    let mut ppu = PPU::new(&mut vram, &mut ppuregs);
-    let mut memory = RamController::new(&mut ppu);
+    let vram = RefCell::new(VRAMController::new());
+    let ppu_regs = Cell::new(PPURegisters::new());
+    let mut memory = RamController::new(&ppu_regs, &vram);
     // let c = Cartridge::load("./roms/nestest.nes");
-    let c = Cartridge::load("../../roms/nestest.nes");
+    // let c = Cartridge::load("../../roms/nestest.nes");
+    let c = Cartridge::load("/Users/emil/code/rustnes/roms/Balloon Fight (E).nes");
 
     if c.prg_rom_banks().len() > 1 {
         memory.load_prg_bank1(&c.prg_rom_banks()[0]);
@@ -34,19 +36,16 @@ fn main()
 
 
     let mut cpu = CPU::new(&mut memory);
+    let mut ppu = PPU::new(&vram, &ppu_regs);
     cpu.reset();
 
     let mut total_cycles = 7;
     let mut should_break = false;
     loop {
-        if cpu.registers.pc() == 0xC66E {
+        /*if cpu.registers.pc() == 0xC66E {
             should_break = true;
-        }
+        }*/
         print!("{:04X}  ", cpu.registers.pc());
-
-        if cpu.registers.pc() == 0xDCC4 {
-            let _fdfd = 5;
-        }
 
         let regs_copy = cpu.registers.clone();
 
@@ -58,9 +57,13 @@ fn main()
         total_cycles += cycles;
         println!();
 
-        if should_break
+        if ppu.process(cycles * 3) == PPUResult::VBlankNMI {
+            cpu.trigger_nmi();
+        }
+
+        /*if should_break
         {
             break;
-        }
+        }*/
     }
 }

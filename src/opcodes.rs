@@ -1,21 +1,12 @@
 use crate::cpuregisters::{CPURegisters, CPUFlags};
 use crate::ram_controller::RamController;
 use crate::opcodes::addressing_mode as mode;
-
-fn push_stack(regs: &mut CPURegisters, mem: &mut RamController, value: u8) {
-    mem.write8(regs.stack(), value);
-    regs.decrement_stack();
-}
-
-fn pop_stack(regs: &mut CPURegisters, mem: &RamController) -> u8 {
-    regs.increment_stack();
-    mem.read8(regs.stack())
-}
+use crate::stack;
 
 pub(crate) fn brk_implied(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     // Write program counter and status flag to stack (TODO Make this code more expressive?)
-    push_stack(regs, mem, (regs.pc() & 0xFF) as u8);
-    push_stack(regs, mem, ((regs.pc() >> 8) & 0xFF) as u8);
+    stack::push(regs, mem, (regs.pc() & 0xFF) as u8);
+    stack::push(regs, mem, ((regs.pc() >> 8) & 0xFF) as u8);
 
     print!("        ");
 
@@ -23,7 +14,7 @@ pub(crate) fn brk_implied(regs: &mut CPURegisters, mem: &mut RamController) -> i
     // In the byte pushed, bit 5 is always set to 1, and bit 4 is 1 if from an
     // instruction (PHP or BRK) or 0 if from an interrupt line being pulled low
     // (/IRQ or /NMI)
-    push_stack(regs, mem, regs.status() | CPUFlags::Unused as u8 | CPUFlags::BreakCommand as u8);
+    stack::push(regs, mem, regs.status() | CPUFlags::Unused as u8 | CPUFlags::BreakCommand as u8);
 
     regs.set_flag(CPUFlags::BreakCommand);
 
@@ -93,7 +84,7 @@ pub(crate) fn ora_indirect_y(regs: &mut CPURegisters, mem: &RamController) -> i3
     if result.page_boundary_crossed { 6 } else { 5 }
 }
 
-fn asl(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
+fn asl(regs: &mut CPURegisters, mem: &mut RamController, address: u16) -> i32 {
     let old_value = mem.read8(address);
     let new_value = old_value << 1;
 
@@ -101,7 +92,7 @@ fn asl(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
     regs.set_flag_if(CPUFlags::Zero, new_value == 0);
     regs.set_flag_if(CPUFlags::Sign, (new_value & 0x80) == 0x80);
 
-    mem.write8(address, new_value);
+    mem.write8(address, new_value)
 }
 
 pub(crate) fn asl_accumulator(regs: &mut CPURegisters) -> i32 {
@@ -115,35 +106,27 @@ pub(crate) fn asl_accumulator(regs: &mut CPURegisters) -> i32 {
 
 pub(crate) fn asl_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page(regs, mem);
-    asl(regs, mem, address);
-
-    5
+    asl(regs, mem, address) + 5
 }
 
 pub(crate) fn asl_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page_x(regs, mem);
-    asl(regs, mem, address);
-
-    6
+    asl(regs, mem, address) + 6
 }
 
 pub(crate) fn asl_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::absolute(regs, mem);
-    asl(regs, mem, address);
-
-    6
+    asl(regs, mem, address) + 6
 }
 
 pub(crate) fn asl_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    let address = mode::absolute_indexed(regs, mem, regs.x()).address;
-    asl(regs, mem, address);
-
     //TODO: Why is this opcode not affected by page boundary crosses?
-    7
+    let address = mode::absolute_indexed(regs, mem, regs.x()).address;
+    asl(regs, mem, address) + 7
 }
 
 pub(crate) fn pla_implied(regs: &mut CPURegisters, mem: &RamController) -> i32 {
-    let value = pop_stack(regs, mem);
+    let value = stack::pop(regs, mem);
     regs.set_accumulator(value);
 
     print!("        ");
@@ -152,8 +135,8 @@ pub(crate) fn pla_implied(regs: &mut CPURegisters, mem: &RamController) -> i32 {
 }
 
 pub(crate) fn rts_implied(regs: &mut CPURegisters, mem: &RamController) -> i32 {
-    let low = pop_stack(regs, mem);
-    let high = pop_stack(regs, mem);
+    let low = stack::pop(regs, mem);
+    let high = stack::pop(regs, mem);
 
     print!("        ");
 
@@ -349,81 +332,55 @@ pub(crate) fn ldx_absolute_y(regs: &mut CPURegisters, mem: &RamController) -> i3
 }
 
 pub(crate) fn sta_indirect_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    mem.write8(mode::indexed_indirect(regs, mem), regs.accumulator());
-
-    6
+    mem.write8(mode::indexed_indirect(regs, mem), regs.accumulator()) + 6
 }
 
 pub(crate) fn sta_indirect_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    mem.write8(mode::indirect_indexed(regs, mem).address, regs.accumulator());
-
-    6
+    mem.write8(mode::indirect_indexed(regs, mem).address, regs.accumulator()) + 6
 }
 
 pub(crate) fn sta_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    mem.write8(mode::zero_page(regs, mem), regs.accumulator());
-
-    3
+    mem.write8(mode::zero_page(regs, mem), regs.accumulator()) + 3
 }
 
 pub(crate) fn sta_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    mem.write8(mode::zero_page_x(regs, mem), regs.accumulator());
-
-    4
+    mem.write8(mode::zero_page_x(regs, mem), regs.accumulator()) + 4
 }
 
 pub(crate) fn sta_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    mem.write8(mode::absolute(regs, mem), regs.accumulator());
-
-    4
+    mem.write8(mode::absolute(regs, mem), regs.accumulator()) + 4
 }
 
 pub(crate) fn sta_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    mem.write8(mode::absolute_indexed(regs, mem, regs.x()).address, regs.accumulator());
-
-    5
+    mem.write8(mode::absolute_indexed(regs, mem, regs.x()).address, regs.accumulator()) + 5
 }
 
 pub(crate) fn sta_absolute_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    mem.write8(mode::absolute_indexed(regs, mem, regs.y()).address, regs.accumulator());
-
-    5
+    mem.write8(mode::absolute_indexed(regs, mem, regs.y()).address, regs.accumulator()) + 5
 }
 
 pub(crate) fn stx_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    mem.write8(mode::zero_page(regs, mem), regs.x());
-
-    3
+    mem.write8(mode::zero_page(regs, mem), regs.x()) + 3
 }
 
 pub(crate) fn stx_zero_page_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    mem.write8(mode::zero_page_y(regs, mem), regs.x());
-
-    4
+    mem.write8(mode::zero_page_y(regs, mem), regs.x()) + 4
 }
 
 pub(crate) fn stx_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    mem.write8(mode::absolute(regs, mem), regs.x());
-
-    4
+    mem.write8(mode::absolute(regs, mem), regs.x()) + 4
 }
 
 pub(crate) fn sty_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    mem.write8(mode::zero_page(regs, mem), regs.y());
-
-    3
+    mem.write8(mode::zero_page(regs, mem), regs.y()) + 3
 }
 
 pub(crate) fn sty_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    mem.write8(mode::zero_page_x(regs, mem), regs.y());
-
-    4
+    mem.write8(mode::zero_page_x(regs, mem), regs.y()) + 4
 }
 
 pub(crate) fn sty_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    mem.write8(mode::absolute(regs, mem), regs.y());
-
-    4
+    mem.write8(mode::absolute(regs, mem), regs.y()) + 4
 }
 
 pub(crate) fn tay_implied(regs: &mut CPURegisters) -> i32 {
@@ -533,37 +490,29 @@ pub(crate) fn lax_absolute_y(regs: &mut CPURegisters, mem: &RamController) -> i3
     if addressing.page_boundary_crossed { 5 } else { 4 }
 }
 
-fn sax(regs: &CPURegisters, mem: &mut RamController, address: u16) {
-    mem.write8(address, regs.accumulator() & regs.x());
+fn sax(regs: &CPURegisters, mem: &mut RamController, address: u16) -> i32 {
+    mem.write8(address, regs.accumulator() & regs.x())
 }
 
 pub(crate) fn sax_indirect_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::indexed_indirect(regs, mem);
-    sax(regs, mem, address);
-
-    6
+    sax(regs, mem, address) + 6
 }
 
 pub(crate) fn sax_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page(regs, mem);
-    sax(regs, mem, address);
-
-    3
+    sax(regs, mem, address) + 3
 }
 
 pub(crate) fn sax_zero_page_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    let address = mode::zero_page_y(regs, mem);
-    sax(regs, mem, address);
-
     //TODO How can this be 4 cycles when the vanilla sax zero page is 6 cycles?
-    4
+    let address = mode::zero_page_y(regs, mem);
+    sax(regs, mem, address) + 4
 }
 
 pub(crate) fn sax_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::absolute(regs, mem);
-    sax(regs, mem, address);
-
-    4
+    sax(regs, mem, address) + 4
 }
 
 pub(crate) fn lda_indirect_x(regs: &mut CPURegisters, mem: &RamController) -> i32 {
@@ -647,8 +596,8 @@ pub(crate) fn jsr_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> 
     let return_address = regs.pc() - 1;
 
     // I think high byte should be pushed first
-    push_stack(regs, mem, (return_address >> 8) as u8);
-    push_stack(regs, mem, return_address as u8);
+    stack::push(regs, mem, (return_address >> 8) as u8);
+    stack::push(regs, mem, return_address as u8);
 
     regs.set_pc(routine_address);
 
@@ -692,7 +641,7 @@ pub(crate) fn rol_accumulator(regs: &mut CPURegisters) -> i32 {
     2
 }
 
-fn rol(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
+fn rol(regs: &mut CPURegisters, mem: &mut RamController, address: u16) -> i32 {
     let old_value = mem.read8(address);
     let mut new_value = old_value << 1;
     if regs.flag(CPUFlags::Carry) {
@@ -702,35 +651,27 @@ fn rol(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
     regs.set_flag_if(CPUFlags::Carry, (old_value & 0x80) == 0x80);
     regs.set_flag_if(CPUFlags::Sign, (new_value & 0x80) == 0x80);
 
-    mem.write8(address, new_value);
+    mem.write8(address, new_value)
 }
 
 pub(crate) fn rol_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page(regs, mem);
-    rol(regs, mem, address);
-
-    5
+    rol(regs, mem, address) + 5
 }
 
 pub(crate) fn rol_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page_x(regs, mem);
-    rol(regs, mem, address);
-
-    6
+    rol(regs, mem, address) + 6
 }
 
 pub(crate) fn rol_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::absolute(regs, mem);
-    rol(regs, mem, address);
-
-    6
+    rol(regs, mem, address) + 6
 }
 
 pub(crate) fn rol_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.x());
-    rol(regs, mem, addressing.address);
-
-    7
+    rol(regs, mem, addressing.address) + 7
 }
 
 pub(crate) fn ror_accumulator(regs: &mut CPURegisters) -> i32 {
@@ -749,7 +690,7 @@ pub(crate) fn ror_accumulator(regs: &mut CPURegisters) -> i32 {
     2
 }
 
-fn ror(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
+fn ror(regs: &mut CPURegisters, mem: &mut RamController, address: u16) -> i32 {
     let old_value = mem.read8(address);
     let mut new_value = old_value >> 1;
 
@@ -760,35 +701,27 @@ fn ror(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
     regs.set_flag_if(CPUFlags::Carry, (old_value & 1) == 1);
     regs.set_flag_if(CPUFlags::Sign, (new_value & 0x80) == 0x80);
 
-    mem.write8(address, new_value);
+    mem.write8(address, new_value)
 }
 
 pub(crate) fn ror_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page(regs, mem);
-    ror(regs, mem, address);
-
-    5
+    ror(regs, mem, address) + 5
 }
 
 pub(crate) fn ror_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page_x(regs, mem);
-    ror(regs, mem, address);
-
-    6
+    ror(regs, mem, address) + 6
 }
 
 pub(crate) fn ror_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::absolute(regs, mem);
-    ror(regs, mem, address);
-
-    6
+    ror(regs, mem, address) + 6
 }
 
 pub(crate) fn ror_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.x());
-    ror(regs, mem, addressing.address);
-
-    7
+    ror(regs, mem, addressing.address) + 7
 }
 
 fn and(regs: &mut CPURegisters, mem: &RamController, address: u16) {
@@ -873,7 +806,7 @@ pub(crate) fn sec_implied(regs: &mut CPURegisters) -> i32 {
 }
 
 pub(crate) fn pha_implied(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
-    push_stack(regs, mem, regs.accumulator());
+    stack::push(regs, mem, regs.accumulator());
 
     print!("        ");
 
@@ -890,42 +823,34 @@ pub(crate) fn lsr_accumulator(regs: &mut CPURegisters) -> i32 {
     2
 }
 
-fn lsr(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
+fn lsr(regs: &mut CPURegisters, mem: &mut RamController, address: u16) -> i32 {
     let old_value = mem.read8(address);
     let new_value = old_value >> 1;
     regs.set_flag_if(CPUFlags::Carry, (old_value & 1) == 1);
     regs.set_flag_if(CPUFlags::Zero, new_value == 0);
     regs.set_flag_if(CPUFlags::Sign, (new_value & 0x80) == 0x80);
 
-    mem.write8(address, old_value >> 1);
+    mem.write8(address, old_value >> 1)
 }
 
 pub(crate) fn lsr_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page(regs, mem);
-    lsr(regs, mem, address);
-
-    5
+    lsr(regs, mem, address) + 5
 }
 
 pub(crate) fn lsr_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page_x(regs, mem);
-    lsr(regs, mem, address);
-
-    6
+    lsr(regs, mem, address) + 6
 }
 
 pub(crate) fn lsr_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::absolute(regs, mem);
-    lsr(regs, mem, address);
-
-    6
+    lsr(regs, mem, address) + 6
 }
 
 pub(crate) fn lsr_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.x());
-    lsr(regs, mem, addressing.address);
-
-    7
+    lsr(regs, mem, addressing.address) + 7
 }
 
 pub(crate) fn jmp_absolute(regs: &mut CPURegisters, mem: &RamController) -> i32 {
@@ -1090,40 +1015,34 @@ pub(crate) fn cpy_absolute(regs: &mut CPURegisters, mem: &RamController) -> i32 
     4
 }
 
-fn dec(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
+fn dec(regs: &mut CPURegisters, mem: &mut RamController, address: u16) -> i32 {
     let value = mem.read8(address).wrapping_sub(1);
-    mem.write8(address, value);
+    let cycles = mem.write8(address, value);
 
     regs.set_flag_if(CPUFlags::Zero, value == 0);
     regs.set_flag_if(CPUFlags::Sign, (value & CPUFlags::Sign as u8) == CPUFlags::Sign as u8);
+
+    cycles
 }
 
 pub(crate) fn dec_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page(regs, mem);
-    dec(regs, mem, address);
-
-    5
+    dec(regs, mem, address) + 5
 }
 
 pub(crate) fn dec_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page_x(regs, mem);
-    dec(regs, mem, address);
-
-    6
+    dec(regs, mem, address) + 6
 }
 
 pub(crate) fn dec_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::absolute(regs, mem);
-    dec(regs, mem, address);
-
-    6
+    dec(regs, mem, address) + 6
 }
 
 pub(crate) fn dec_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.x());
-    dec(regs, mem, addressing.address);
-
-    7
+    dec(regs, mem, addressing.address) + 7
 }
 
 pub(crate) fn dex_implied(regs: &mut CPURegisters) -> i32 {
@@ -1203,10 +1122,10 @@ pub(crate) fn eor_indirect_y(regs: &mut CPURegisters, mem: &RamController) -> i3
 }
 
 pub(crate) fn rti_implied(regs: &mut CPURegisters, mem: &RamController) -> i32 {
-    let new_status = pop_stack(regs, mem) | CPUFlags::Unused as u8;
+    let new_status = stack::pop(regs, mem) | CPUFlags::Unused as u8;
     regs.set_status(new_status);
 
-    let new_pc = pop_stack(regs, mem) as u16 | ((pop_stack(regs, mem) as u16) << 8);
+    let new_pc = stack::pop(regs, mem) as u16 | ((stack::pop(regs, mem) as u16) << 8);
     regs.set_pc(new_pc);
 
     print!("        ");
@@ -1214,40 +1133,34 @@ pub(crate) fn rti_implied(regs: &mut CPURegisters, mem: &RamController) -> i32 {
     6
 }
 
-fn inc(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
+fn inc(regs: &mut CPURegisters, mem: &mut RamController, address: u16) -> i32 {
     let value = mem.read8(address).wrapping_add(1);
-    mem.write8(address, value);
+    let cycles = mem.write8(address, value);
 
     regs.set_flag_if(CPUFlags::Zero, value == 0);
     regs.set_flag_if(CPUFlags::Sign, (value & CPUFlags::Sign as u8) == CPUFlags::Sign as u8);
+
+    cycles
 }
 
 pub(crate) fn inc_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page(regs, mem);
-    inc(regs, mem, address);
-
-    5
+    inc(regs, mem, address) + 5
 }
 
 pub(crate) fn inc_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page_x(regs, mem);
-    inc(regs, mem, address);
-
-    6
+    inc(regs, mem, address) + 6
 }
 
 pub(crate) fn inc_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::absolute(regs, mem);
-    inc(regs, mem, address);
-
-    6
+    inc(regs, mem, address) + 6
 }
 
 pub(crate) fn inc_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.x());
-    inc(regs, mem, addressing.address);
-
-    7
+    inc(regs, mem, addressing.address) + 7
 }
 
 pub(crate) fn inx_implied(regs: &mut CPURegisters) -> i32 {
@@ -1391,293 +1304,268 @@ pub(crate) fn beq_relative(regs: &mut CPURegisters, mem: &RamController) -> i32 
 
 pub(crate) fn dcp_indirect_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::indexed_indirect(regs, mem);
-    dec(regs, mem, address);
+    let cycles = dec(regs, mem, address);
     cmp(regs, regs.accumulator(), mem.read8(address));
 
-    8
+    cycles + 8
 }
 
 pub(crate) fn dcp_indirect_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::indirect_indexed(regs, mem);
-    dec(regs, mem, addressing.address);
+    let cycles = dec(regs, mem, addressing.address);
     cmp(regs, regs.accumulator(), mem.read8(addressing.address));
 
-    8
+    cycles + 8
 }
 
 pub(crate) fn dcp_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page(regs, mem);
-    dec(regs, mem, address);
+    let cycles = dec(regs, mem, address);
     cmp(regs, regs.accumulator(), mem.read8(address));
 
-    5
+    cycles + 5
 }
 
 pub(crate) fn dcp_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page_x(regs, mem);
-    dec(regs, mem, address);
+    let cycles = dec(regs, mem, address);
     cmp(regs, regs.accumulator(), mem.read8(address));
 
-    6
+    cycles + 6
 }
 
 pub(crate) fn dcp_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::absolute(regs, mem);
-    dec(regs, mem, address);
+    let cycles = dec(regs, mem, address);
     cmp(regs, regs.accumulator(), mem.read8(address));
 
-    6
+    cycles + 6
 }
 
 pub(crate) fn dcp_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.x());
-    dec(regs, mem, addressing.address);
+    let cycles = dec(regs, mem, addressing.address);
     cmp(regs, regs.accumulator(), mem.read8(addressing.address));
 
-    7
+    cycles + 7
 }
 
 pub(crate) fn dcp_absolute_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.y());
-    dec(regs, mem, addressing.address);
+    let cycles = dec(regs, mem, addressing.address);
     cmp(regs, regs.accumulator(), mem.read8(addressing.address));
 
-    7
+    cycles + 7
 }
 
-fn isc(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
-    inc(regs, mem, address);
+fn isc(regs: &mut CPURegisters, mem: &mut RamController, address: u16) -> i32 {
+    let cycles = inc(regs, mem, address);
     sbc(regs, mem.read8(address));
+
+    cycles
 }
 
 pub(crate) fn isc_indirect_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::indexed_indirect(regs, mem);
-    isc(regs, mem, address);
-    8
+    isc(regs, mem, address) + 8
 }
 
 pub(crate) fn isc_indirect_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::indirect_indexed(regs, mem);
-    isc(regs, mem, addressing.address);
-    8
+    isc(regs, mem, addressing.address) + 8
 }
 
 pub(crate) fn isc_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page(regs, mem);
-    isc(regs, mem, address);
-    5
+    isc(regs, mem, address) + 5
 }
 
 pub(crate) fn isc_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page_x(regs, mem);
-    isc(regs, mem, address);
-    6
+    isc(regs, mem, address) + 6
 }
 
 pub(crate) fn isc_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::absolute(regs, mem);
-    isc(regs, mem, address);
-    6
+    isc(regs, mem, address) + 6
 }
 
 pub(crate) fn isc_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.x());
-    isc(regs, mem, addressing.address);
-    7
+    isc(regs, mem, addressing.address) + 7
 }
 
 pub(crate) fn isc_absolute_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.y());
-    isc(regs, mem, addressing.address);
-    7
+    isc(regs, mem, addressing.address) + 7
 }
 
-fn slo(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
-    asl(regs, mem, address);
+fn slo(regs: &mut CPURegisters, mem: &mut RamController, address: u16) -> i32 {
+    let cycles = asl(regs, mem, address);
     ora(regs, mem.read8(address));
+
+    cycles
 }
 
 pub(crate) fn slo_indirect_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::indexed_indirect(regs, mem);
-    slo(regs, mem, address);
-    8
+    slo(regs, mem, address) + 8
 }
 
 pub(crate) fn slo_indirect_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::indirect_indexed(regs, mem);
-    slo(regs, mem, addressing.address);
-    8
+    slo(regs, mem, addressing.address) + 8
 }
 
 pub(crate) fn slo_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page(regs, mem);
-    slo(regs, mem, address);
-    5
+    slo(regs, mem, address) + 5
 }
 
 pub(crate) fn slo_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page_x(regs, mem);
-    slo(regs, mem, address);
-    6
+    slo(regs, mem, address) + 6
 }
 
 pub(crate) fn slo_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::absolute(regs, mem);
-    slo(regs, mem, address);
-    6
+    slo(regs, mem, address) + 6
 }
 
 pub(crate) fn slo_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.x());
-    slo(regs, mem, addressing.address);
-    7
+    slo(regs, mem, addressing.address) + 7
 }
 
 pub(crate) fn slo_absolute_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.y());
-    slo(regs, mem, addressing.address);
-    7
+    slo(regs, mem, addressing.address) + 7
 }
 
-pub(crate) fn rla(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
-    rol(regs, mem, address);
+pub(crate) fn rla(regs: &mut CPURegisters, mem: &mut RamController, address: u16) -> i32 {
+    let cycles = rol(regs, mem, address);
     and(regs, mem, address);
+
+    cycles
 }
 
 pub(crate) fn rla_indirect_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::indexed_indirect(regs, mem);
-    rla(regs, mem, address);
-    8
+    rla(regs, mem, address) + 8
 }
 
 pub(crate) fn rla_indirect_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::indirect_indexed(regs, mem);
-    rla(regs, mem, addressing.address);
-    8
+    rla(regs, mem, addressing.address) + 8
 }
 
 pub(crate) fn rla_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page(regs, mem);
-    rla(regs, mem, address);
-    5
+    rla(regs, mem, address) + 5
 }
 
 pub(crate) fn rla_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page_x(regs, mem);
-    rla(regs, mem, address);
-    6
+    rla(regs, mem, address) + 6
 }
 
 pub(crate) fn rla_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::absolute(regs, mem);
-    rla(regs, mem, address);
-    6
+    rla(regs, mem, address) + 6
 }
 
 pub(crate) fn rla_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.x());
-    rla(regs, mem, addressing.address);
-    7
+    rla(regs, mem, addressing.address) + 7
 }
 
 pub(crate) fn rla_absolute_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.y());
-    rla(regs, mem, addressing.address);
-    7
+    rla(regs, mem, addressing.address) + 7
 }
 
-pub(crate) fn sre(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
-    lsr(regs, mem, address);
+pub(crate) fn sre(regs: &mut CPURegisters, mem: &mut RamController, address: u16) -> i32 {
+    let cycles = lsr(regs, mem, address);
     eor(regs, mem.read8(address));
+
+    cycles
 }
 
 pub(crate) fn sre_indirect_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::indexed_indirect(regs, mem);
-    sre(regs, mem, address);
-    8
+    sre(regs, mem, address) + 8
 }
 
 pub(crate) fn sre_indirect_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::indirect_indexed(regs, mem);
-    sre(regs, mem, addressing.address);
-    8
+    sre(regs, mem, addressing.address) + 8
 }
 
 pub(crate) fn sre_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page(regs, mem);
-    sre(regs, mem, address);
-    5
+    sre(regs, mem, address) + 5
 }
 
 pub(crate) fn sre_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page_x(regs, mem);
-    sre(regs, mem, address);
-    6
+    sre(regs, mem, address) + 6
 }
 
 pub(crate) fn sre_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::absolute(regs, mem);
-    sre(regs, mem, address);
-    6
+    sre(regs, mem, address) + 6
 }
 
 pub(crate) fn sre_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.x());
-    sre(regs, mem, addressing.address);
-    7
+    sre(regs, mem, addressing.address) + 7
 }
 
 pub(crate) fn sre_absolute_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.y());
-    sre(regs, mem, addressing.address);
-    7
+    sre(regs, mem, addressing.address) + 7
 }
 
-pub(crate) fn rra(regs: &mut CPURegisters, mem: &mut RamController, address: u16) {
-    ror(regs, mem, address);
+pub(crate) fn rra(regs: &mut CPURegisters, mem: &mut RamController, address: u16) -> i32 {
+    let cycles = ror(regs, mem, address);
     adc(regs, mem.read8(address));
+
+    cycles
 }
 
 pub(crate) fn rra_indirect_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::indexed_indirect(regs, mem);
-    rra(regs, mem, address);
-    8
+    rra(regs, mem, address) + 8
 }
 
 pub(crate) fn rra_indirect_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::indirect_indexed(regs, mem);
-    rra(regs, mem, addressing.address);
-    8
+    rra(regs, mem, addressing.address) + 8
 }
 
 pub(crate) fn rra_zero_page(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page(regs, mem);
-    rra(regs, mem, address);
-    5
+    rra(regs, mem, address) + 5
 }
 
 pub(crate) fn rra_zero_page_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::zero_page_x(regs, mem);
-    rra(regs, mem, address);
-    6
+    rra(regs, mem, address) + 6
 }
 
 pub(crate) fn rra_absolute(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let address = mode::absolute(regs, mem);
-    rra(regs, mem, address);
-    6
+    rra(regs, mem, address) + 6
 }
 
 pub(crate) fn rra_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.x());
-    rra(regs, mem, addressing.address);
-    7
+    rra(regs, mem, addressing.address) + 7
 }
 
 pub(crate) fn rra_absolute_y(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     let addressing = mode::absolute_indexed(regs, mem, regs.y());
-    rra(regs, mem, addressing.address);
-    7
+    rra(regs, mem, addressing.address) + 7
 }
 
 pub(crate) fn php_implied(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
@@ -1685,7 +1573,7 @@ pub(crate) fn php_implied(regs: &mut CPURegisters, mem: &mut RamController) -> i
     // In the byte pushed, bit 5 is always set to 1, and bit 4 is 1 if from an
     // instruction (PHP or BRK) or 0 if from an interrupt line being pulled low
     // (/IRQ or /NMI)
-    push_stack(regs, mem, regs.status() | CPUFlags::Unused as u8 | CPUFlags::BreakCommand as u8);
+    stack::push(regs, mem, regs.status() | CPUFlags::Unused as u8 | CPUFlags::BreakCommand as u8);
 
     print!("        ");
 
@@ -1694,7 +1582,7 @@ pub(crate) fn php_implied(regs: &mut CPURegisters, mem: &mut RamController) -> i
 
 pub(crate) fn plp_implied(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     // PLP ignores bit 4 and 5. 5 is unused and should always be 1.
-    let status = pop_stack(regs, mem);
+    let status = stack::pop(regs, mem);
 
     regs.set_status((status | CPUFlags::Unused as u8) & !(CPUFlags::BreakCommand as u8));
 
