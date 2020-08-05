@@ -158,12 +158,12 @@ impl<'a> PPU<'_> {
         }
 
         if self.scanline >= 240 && self.scanline < 261 {
-            let frame_cycles_before = self.frame_cycle;
+            let scanline_cycle_before = self.scanline_cycle;
 
             // Spend as many cycles as possible, but do not exceed 341
             self.spend_cycles(  self.cycle_remainders.min(341 - self.scanline_cycle));
 
-            if frame_cycles_before < 82523 && self.frame_cycle >= 82523 {
+            if self.scanline == 241 && scanline_cycle_before < 1 && self.scanline_cycle >= 1 {
                 let mut regs = self.ppu_regs.get();
                 regs.set_vblank();
                 self.ppu_regs.set(regs);

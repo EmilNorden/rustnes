@@ -10,6 +10,7 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use crate::texture::Texture;
 use crate::renderer_gl::{Shader, Program};
+use std::io::{self, Write};
 
 mod cpu;
 mod cpuregisters;
@@ -115,6 +116,7 @@ fn main()
     // let c = Cartridge::load("../../roms/nestest.nes");
     // let c = Cartridge::load("/Users/emil/code/rustnes/roms/Balloon Fight (E).nes");
     let c = Cartridge::load("/Users/emil/code/rustnes/roms/Donkey_Kong_JU.nes");
+    // let c = Cartridge::load("/Users/emil/code/rustnes/roms/nestest.nes");
     // let c = Cartridge::load("/Users/emil/code/rustnes/roms/full_palette.nes");
 
     if c.prg_rom_banks().len() > 1 {
@@ -146,6 +148,9 @@ fn main()
 
     let mut iteration = 0;
 
+
+    // ppu.process(total_cycles * 3);
+
     'running: loop {
         iteration += 1;
         for event in event_pump.poll_iter() {
@@ -161,26 +166,34 @@ fn main()
             }
         }
 
-        print!("{:04X}  ", cpu.registers.pc());
+        if total_cycles == 27399 {
+            let ffff = 2323;
+        }
 
+        print!("{:04X}  ", cpu.registers.pc());
+        io::stdout().flush().unwrap();
         let regs_copy = cpu.registers.clone();
 
         let cycles = cpu.process_instruction();
-        print!("A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X} CYC:{}",
-               regs_copy.accumulator(), regs_copy.x(), regs_copy.y(), regs_copy.status(),
-               regs_copy.stack() & 0xFF, total_cycles);
+        io::stdout().flush().unwrap();
 
-        total_cycles += cycles;
-        println!();
+        let pixel = ppu.pixel();
+        let scanline = ppu.scanline();
 
         if ppu.process(cycles * 3) == PPUResult::VBlankNMI {
             cpu.trigger_nmi();
         }
 
-        /*if should_break
-        {
-            break;
-        }*/
+        print!("A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X} PPU:{: >3},{: >3} CYC:{}",
+               regs_copy.accumulator(), regs_copy.x(), regs_copy.y(), regs_copy.status(),
+               regs_copy.stack() & 0xFF, pixel, scanline, total_cycles);
+        total_cycles += cycles;
+        println!();
+        io::stdout().flush().unwrap();
+
+        if regs_copy.pc() == 0xC66E {
+            break 'running;
+        }
 
         if foo {
             foo = false;
