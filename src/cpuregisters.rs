@@ -15,6 +15,7 @@ pub struct CPURegisters {
     status: u8,
     pc: u16,
     stack: u16,
+    pub rts_counter: u32,
 }
 
 pub enum CPUFlags {
@@ -37,6 +38,7 @@ impl CPURegisters {
             status: 0b00100100, // Processor starts with interrupts disabled
             pc: 0,
             stack: 0x01FD,
+            rts_counter: 0
         }
     }
 

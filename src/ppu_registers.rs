@@ -27,16 +27,24 @@ impl PPURegisters {
         }
     }
 
+    fn set_last_written_value(&mut self, value: u8) {
+        let least_significant_bits = value & 0b00011111;
+        self.ppustatus = (self.ppustatus & 0b11100000) | least_significant_bits;
+    }
+
     pub fn set_ppuctrl(&mut self, value: u8) {
         self.ppuctrl = value;
+        self.set_last_written_value(value);
     }
 
     pub fn set_ppumask(&mut self, value: u8) {
         self.ppumask = value;
+        self.set_last_written_value(value);
     }
 
     pub fn set_oamaddr(&mut self, value: u8) {
         self.oamaddr = value;
+        self.set_last_written_value(value);
     }
 
     pub fn set_ppuscroll(&mut self, value: u8) {
@@ -48,6 +56,7 @@ impl PPURegisters {
         }
 
         self.ppuscroll_toggle = !self.ppuscroll_toggle;
+        self.set_last_written_value(value);
     }
 
     pub fn set_ppuaddr(&mut self, value: u8) {
@@ -59,6 +68,7 @@ impl PPURegisters {
         }
 
         self.ppuaddr_toggle = !self.ppuaddr_toggle;
+        self.set_last_written_value(value);
     }
 
     pub fn oamaddr(&self) -> u8 {

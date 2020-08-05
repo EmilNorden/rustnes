@@ -21,7 +21,7 @@ impl<'a> CPU<'_> {
         self.registers = CPURegisters::new();
 
         let address = self.memory.read16(RESET_VECTOR);
-        self.registers.set_pc(address);
+        self.registers.set_pc(address + 1);
 
         // Only used with nestest
         // self.registers.set_pc(0xC000);
@@ -36,8 +36,16 @@ impl<'a> CPU<'_> {
         self.registers.set_pc(address);
     }
 
+    pub(crate) fn print_foo(&self) {
+        println!("ppuaddr start");
+        for x in &self.memory.foobar {
+            println!("{:04X}", x);
+        }
+        println!("ppuaddr end");
+    }
+
     pub(crate) fn process_instruction(&mut self) -> i32 {
-        if self.registers.pc() == 0xC03F {
+        if self.registers.pc() == 0xF0E9 {
             let foo = 2;
         }
         let opcode = self.memory.read8(self.registers.increment_pc());

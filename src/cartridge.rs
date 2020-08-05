@@ -3,11 +3,16 @@ use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::error::Error;
 
 pub(crate) struct Cartridge {
-    prg_rom_banks: Vec<PrgRomBank>
+    prg_rom_banks: Vec<PrgRomBank>,
+    chr_rom_banks: Vec<ChrRomBank>
 }
 
 pub(crate) struct PrgRomBank {
     data: [u8; 0x4000]
+}
+
+pub(crate) struct ChrRomBank {
+    data: [u8; 0x2000]
 }
 
 impl Cartridge {
@@ -28,7 +33,7 @@ impl Cartridge {
         }
 
         let prg_rom_bank_count = header[4];
-        let _chr_rom_size = header[5] as i32 * 0x2000;
+        let chr_rom_bank_count = header[5];
         let flags6 = header[6];
 
         let has_trainer_mask = 0b00000100;
@@ -46,14 +51,24 @@ impl Cartridge {
             prg_rom_banks.push(PrgRomBank::new(buffer));
         }
 
+        let mut chr_rom_banks = Vec::new();
+        for _ in 0..chr_rom_bank_count {
+            let mut buffer = [0u8; 0x2000];
+            file.read_exact(&mut buffer).unwrap();
+
+            chr_rom_banks.push(ChrRomBank::new(buffer));
+        }
+
         Cartridge {
-            prg_rom_banks
+            prg_rom_banks,
+            chr_rom_banks
         }
     }
 
     pub(crate) fn prg_rom_banks(&self) -> &Vec<PrgRomBank> {
         &self.prg_rom_banks
     }
+    pub(crate) fn chr_rom_banks(&self) -> &Vec<ChrRomBank> { &self.chr_rom_banks }
 }
 
 impl PrgRomBank {
@@ -66,4 +81,14 @@ impl PrgRomBank {
     pub(crate) fn get_data(&self) -> &[u8; 0x4000] {
         &self.data
     }
+}
+
+impl ChrRomBank {
+    pub(crate) fn new(data: [u8; 0x2000]) -> ChrRomBank {
+        ChrRomBank {
+            data
+        }
+    }
+
+    pub(crate) fn get_data(&self) -> &[u8; 0x2000] { &self.data }
 }

@@ -8,6 +8,7 @@ pub struct RamController<'a> {
     ppu_regs: &'a Cell<PPURegisters>,
     vram: &'a RefCell<VRAMController>,
     memory: [u8; 0x10000],
+    pub     foobar: Vec<u16>,
 }
 
 impl RamController<'_> {
@@ -20,6 +21,7 @@ impl RamController<'_> {
             ppu_regs,
             vram,
             memory: [0; 0x10000],
+            foobar: vec![]
         }
     }
     pub fn read8(&self, address: u16) -> u8 {
@@ -84,14 +86,14 @@ impl RamController<'_> {
                 Some(status)
             },
             0x2004 => {
-                Some(self.vram.read8(address))
+                Some(self.vram.borrow().read8(address))
             },
             0x2007 => {
                 let mut regs = self.ppu_regs.get();
                 let ppuaddr = regs.ppuaddr();
                 regs.increment_ppuaddr();
                 self.ppu_regs.set(regs);
-                Some(self.vram.read8(ppuaddr))
+                Some(self.vram.borrow().read8(ppuaddr))
             }
             _ => None
         }
@@ -122,7 +124,10 @@ impl RamController<'_> {
             },
             0x2004 => {
                 let mut regs = self.ppu_regs.get();
-                self.vram.borrow_mut().write8(regs.oamaddr() as u16, value); // TODO: Where is OAM located? Right now I'm assuming it starts at address 0 which is probably wrong
+                self.vram.borrow_mut().write_oam(regs.oamaddr(), value);
+                if value > 0 {
+                    println!("test");
+                }
                 regs.set_oamaddr(regs.oamaddr() + 1);
                 self.ppu_regs.set(regs);
 
@@ -145,6 +150,7 @@ impl RamController<'_> {
             0x2007 => {
                 let mut regs = self.ppu_regs.get();
                 self.vram.borrow_mut().write8(regs.ppuaddr(), value);
+                self.foobar.push(regs.ppuaddr());
                 regs.increment_ppuaddr();
                 self.ppu_regs.set(regs);
 
