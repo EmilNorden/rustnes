@@ -21,7 +21,7 @@ impl<'a> CPU<'_> {
         self.registers = CPURegisters::new();
 
         let address = self.memory.read16(RESET_VECTOR);
-        self.registers.set_pc(address + 1);
+        self.registers.set_pc(address);
 
         // Only used with nestest
         // self.registers.set_pc(0xC000);

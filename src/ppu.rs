@@ -22,6 +22,7 @@ pub struct PPU<'a> {
     scanline: i32,
     cycle_remainders: i32,
     idle_cycle: bool,
+    cycle_deduction: i32,
 
     name_table: u8,
     attribute_table: u8,
@@ -33,13 +34,25 @@ pub struct PPU<'a> {
 }
 
 impl<'a> PPU<'_> {
+
+    // Just for debugging
+    pub fn pixel(&self) -> i32 {
+        self.scanline_cycle
+    }
+
+    pub fn scanline(&self) -> i32 {
+        self.scanline
+    }
+
+
     pub fn new(vram: &'a RefCell<VRAMController>, ppu_regs: &'a Cell<PPURegisters>) -> PPU<'a> {
         PPU {
             frame_cycle: 0,
             scanline_cycle: 0,
-            scanline: -1,
+            scanline: 0,
             cycle_remainders: 0,
             idle_cycle: true,
+            cycle_deduction: 0,
 
             name_table: 0,
             attribute_table: 0,
@@ -140,11 +153,7 @@ impl<'a> PPU<'_> {
             let foo = 3;
         }
 
-        if self.scanline == -1 || self.scanline == 261 {
-            self.render_visible_scanlines();
-        }
-
-        if self.scanline > -1 && self.scanline < 240 {
+        if self.scanline < 240 || self.scanline == 261 {
             self.render_visible_scanlines()
         }
 
@@ -171,7 +180,7 @@ impl<'a> PPU<'_> {
             self.scanline += 1;
             self.idle_cycle = true;
 
-            if self.scanline == 261 {
+            if self.scanline == 262 {
                 self.scanline = 0;
                 self.frame_cycle = 0;
             }
@@ -198,8 +207,31 @@ impl<'a> PPU<'_> {
         result
     }
 
-    fn spend_cycles(&mut self, cycles: i32) -> bool {
+    fn spend_cycles(&mut self, mut cycles: i32) -> bool {
+        if self.cycle_remainders == 0 {
+            return false;
+        }
+
+        cycles -= self.cycle_deduction;
+
         if self.cycle_remainders >= cycles {
+            self.cycle_remainders -= cycles;
+            self.scanline_cycle += cycles;
+            self.frame_cycle += cycles;
+            self.cycle_deduction = 0;
+            true
+        } else {
+            self.scanline_cycle += self.cycle_remainders;
+            self.frame_cycle += self.cycle_remainders;
+            self.cycle_deduction = cycles - self.cycle_remainders;
+            self.cycle_remainders = 0;
+
+            false
+        }
+    }
+
+    /*fn spend_cycles(&mut self, cycles: i32) -> bool {
+        if self.cycle_remainders > 0 {
             self.cycle_remainders -= cycles;
             self.scanline_cycle += cycles;
             self.frame_cycle += cycles;
@@ -207,5 +239,6 @@ impl<'a> PPU<'_> {
         }
 
         false
-    }
+    }*/
+
 }
