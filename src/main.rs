@@ -166,11 +166,10 @@ fn main()
             }
         }
 
-        if total_cycles == 27399 {
-            let ffff = 2323;
-        }
+        let op = cpu.decode();
+        cpu.process(op);
 
-        print!("{:04X}  ", cpu.registers.pc());
+        /*print!("{:04X}  ", cpu.registers.pc());
         io::stdout().flush().unwrap();
         let regs_copy = cpu.registers.clone();
 
@@ -193,7 +192,7 @@ fn main()
 
         if regs_copy.pc() == 0xC66E {
             break 'running;
-        }
+        }*/
 
         if foo {
             foo = false;

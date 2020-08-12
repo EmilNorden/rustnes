@@ -2,6 +2,164 @@ use crate::cpuregisters::{CPURegisters, CPUFlags};
 use crate::ram_controller::RamController;
 use crate::opcodes::addressing_mode as mode;
 use crate::stack;
+use crate::cpu::{ValueSource, ValueSourceResult};
+
+pub(crate) struct AddressingResult {
+    pub address: AbsoluteAddress,
+    pub page_boundary_crossed: bool,
+}
+
+pub(crate) struct ValueAddressingResult {
+    pub address: Option<AbsoluteAddress>,
+    pub value: u8,
+    pub page_boundary_crossed: bool,
+}
+
+pub(crate) struct ZeroPageAddress(u8);
+
+#[derive(Copy, Clone)]
+pub(crate) struct AbsoluteAddress(u16);
+
+pub(crate) struct RelativeAddress(i8);
+
+impl ZeroPageAddress {
+    pub(crate) fn from(addr: u8) -> ZeroPageAddress {
+        ZeroPageAddress { 0: addr }
+    }
+    pub(crate) fn absolute(&self) -> AbsoluteAddress { AbsoluteAddress { 0: self.0 as u16 } }
+    pub(crate) fn offset(&self, val: u8) -> ZeroPageAddress { ZeroPageAddress { 0: self.0.wrapping_add(val) } }
+}
+
+impl AbsoluteAddress {
+    pub(crate) fn from(addr: u16) -> AbsoluteAddress {
+        AbsoluteAddress { 0: addr }
+    }
+
+    pub(crate) fn from_u8(low: u8, high: u8) -> AbsoluteAddress {
+        AbsoluteAddress::from((high as u16) << 8 | low as u16)
+    }
+
+    pub(crate) fn low(&self) -> u8 {
+        self.0 as u8
+    }
+
+    pub(crate) fn high(&self) -> u8 {
+        (self.0 >> 8) as u8
+    }
+
+    pub(crate) fn offset(&self, val: u8) -> AbsoluteAddress { AbsoluteAddress { 0: self.0.wrapping_add(1) } }
+}
+
+impl RelativeAddress {
+    pub(crate) fn from(addr: i8) -> RelativeAddress { RelativeAddress { 0: addr } }
+}
+
+pub(crate) enum InstructionType {
+    ADC,
+    AND,
+    ASL,
+    BCC,
+    BCS,
+    BEQ,
+    BIT,
+    BMI,
+    BNE,
+    BPL,
+    BRK,
+    BVC,
+    BVS,
+    CLC,
+    CLD,
+    CLI,
+    CLV,
+    CMP,
+    CPX,
+    CPY,
+    DCP,
+    DEC,
+    DEX,
+    DEY,
+    EOR,
+    INC,
+    INX,
+    INY,
+    ISC,
+    JMP,
+    JSR,
+    LAX,
+    LDA,
+    LDX,
+    LDY,
+    LSR,
+    NOP,
+    ORA,
+    PHA,
+    PHP,
+    PLA,
+    PLP,
+    RLA,
+    RRA,
+    ROL,
+    ROR,
+    RTI,
+    RTS,
+    SAX,
+    SBC,
+    SEC,
+    SED,
+    SEI,
+    SLO,
+    SRE,
+    STA,
+    STX,
+    STY,
+    TAX,
+    TAY,
+    TSX,
+    TXA,
+    TXS,
+    TYA,
+}
+
+pub(crate) enum AddressingMode {
+    Implicit,
+    Accumulator,
+    Immediate(u8),
+    Indirect(AbsoluteAddress),
+    ZeroPage(ZeroPageAddress),
+    ZeroPageX(ZeroPageAddress),
+    ZeroPageY(ZeroPageAddress),
+    Relative(RelativeAddress),
+    Absolute(AbsoluteAddress),
+    AbsoluteX(AbsoluteAddress),
+    AbsoluteY(AbsoluteAddress),
+    IndexedIndirect(ZeroPageAddress),
+    IndirectIndexed(ZeroPageAddress),
+}
+
+pub(crate) struct OpCode {
+    instruction: InstructionType,
+    mode: AddressingMode,
+    cycles: i32,
+}
+
+impl OpCode {
+    pub fn new(instruction: InstructionType, mode: AddressingMode, cycles: i32) -> OpCode {
+        OpCode {
+            instruction,
+            mode,
+            cycles,
+        }
+    }
+
+    pub fn instruction(&self) -> &InstructionType {
+        &self.instruction
+    }
+
+    pub fn mode(&self) -> &AddressingMode {
+        &self.mode
+    }
+}
 
 pub(crate) fn brk_implied(regs: &mut CPURegisters, mem: &mut RamController) -> i32 {
     // Write program counter and status flag to stack (TODO Make this code more expressive?)
@@ -84,6 +242,23 @@ pub(crate) fn ora_indirect_y(regs: &mut CPURegisters, mem: &RamController) -> i3
     if result.page_boundary_crossed { 6 } else { 5 }
 }
 
+pub(crate) fn aslx(regs: &mut CPURegisters, mem: &mut RamController, source: &mut ValueSourceResult) -> i32 {
+    let f = match source {
+        ValueSourceResult::AccumulatorX(s) => s as &mut ValueSource,
+        ValueSourceResult::MemoryX(s) => s as &mut ValueSource,
+    };
+    let old_value = f.get_value();
+    let new_value = old_value << 1;
+
+    regs.set_flag_if(CPUFlags::Carry, (old_value & 0x80) == 0x80);
+    regs.set_flag_if(CPUFlags::Zero, new_value == 0);
+    regs.set_flag_if(CPUFlags::Sign, (new_value & 0x80) == 0x80);
+
+    f.set_value(new_value);
+
+    0
+}
+
 fn asl(regs: &mut CPURegisters, mem: &mut RamController, address: u16) -> i32 {
     let old_value = mem.read8(address);
     let new_value = old_value << 1;
@@ -146,7 +321,7 @@ pub(crate) fn rts_implied(regs: &mut CPURegisters, mem: &RamController) -> i32 {
     6
 }
 
-fn adc(regs: &mut CPURegisters, value: u8) {
+pub(crate) fn adc(regs: &mut CPURegisters, value: u8) {
     let result = regs.accumulator() as u16 + value as u16 + (regs.status() as u16 & CPUFlags::Carry as u16);
 
     // If we wrapped around, set carry flag
@@ -724,6 +899,10 @@ pub(crate) fn ror_absolute_x(regs: &mut CPURegisters, mem: &mut RamController) -
     ror(regs, mem, addressing.address) + 7
 }
 
+pub(crate) fn andx(regs: &mut CPURegisters, value: u8) {
+    regs.set_accumulator(regs.accumulator() & value);
+}
+
 fn and(regs: &mut CPURegisters, mem: &RamController, address: u16) {
     let value = mem.read8(address);
     regs.set_accumulator(regs.accumulator() & value);
@@ -974,42 +1153,42 @@ pub(crate) fn cmp_indirect_y(regs: &mut CPURegisters, mem: &RamController) -> i3
 }
 
 pub(crate) fn cpx_immediate(regs: &mut CPURegisters, mem: &RamController) -> i32 {
-    let address= mode::immediate(regs, mem);
+    let address = mode::immediate(regs, mem);
     cmp(regs, regs.x(), mem.read8(address));
 
     2
 }
 
 pub(crate) fn cpx_zero_page(regs: &mut CPURegisters, mem: &RamController) -> i32 {
-    let address= mode::zero_page(regs, mem);
+    let address = mode::zero_page(regs, mem);
     cmp(regs, regs.x(), mem.read8(address));
 
     3
 }
 
 pub(crate) fn cpx_absolute(regs: &mut CPURegisters, mem: &RamController) -> i32 {
-    let address= mode::absolute(regs, mem);
+    let address = mode::absolute(regs, mem);
     cmp(regs, regs.x(), mem.read8(address));
 
     4
 }
 
 pub(crate) fn cpy_immediate(regs: &mut CPURegisters, mem: &RamController) -> i32 {
-    let address= mode::immediate(regs, mem);
+    let address = mode::immediate(regs, mem);
     cmp(regs, regs.y(), mem.read8(address));
 
     2
 }
 
 pub(crate) fn cpy_zero_page(regs: &mut CPURegisters, mem: &RamController) -> i32 {
-    let address= mode::zero_page(regs, mem);
+    let address = mode::zero_page(regs, mem);
     cmp(regs, regs.y(), mem.read8(address));
 
     3
 }
 
 pub(crate) fn cpy_absolute(regs: &mut CPURegisters, mem: &RamController) -> i32 {
-    let address= mode::absolute(regs, mem);
+    let address = mode::absolute(regs, mem);
     cmp(regs, regs.y(), mem.read8(address));
 
     4
@@ -1275,7 +1454,6 @@ pub(crate) fn nop_zero_page_x(regs: &mut CPURegisters, mem: &RamController) -> i
 }
 
 pub(crate) fn nop_absolute(regs: &mut CPURegisters, mem: &RamController) -> i32 {
-
     let address = mode::absolute(regs, mem);
     mem.read8(address);
 
@@ -1283,7 +1461,6 @@ pub(crate) fn nop_absolute(regs: &mut CPURegisters, mem: &RamController) -> i32 
 }
 
 pub(crate) fn nop_absolute_x(regs: &mut CPURegisters, mem: &RamController) -> i32 {
-
     let addressing = mode::absolute_indexed(regs, mem, regs.x());
     mem.read8(addressing.address);
 

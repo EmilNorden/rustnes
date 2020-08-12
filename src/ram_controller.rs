@@ -3,10 +3,11 @@ use crate::ppu::PPU;
 use crate::ppu_registers::PPURegisters;
 use std::cell::{Cell, RefCell};
 use crate::vram_controller::VRAMController;
+use crate::opcodes::AbsoluteAddress;
 
-pub struct RamController<'a> {
-    ppu_regs: &'a Cell<PPURegisters>,
-    vram: &'a RefCell<VRAMController>,
+pub struct RamController<'data> {
+    ppu_regs: &'data Cell<PPURegisters>,
+    vram: &'data RefCell<VRAMController>,
     memory: [u8; 0x10000],
     pub     foobar: Vec<u16>,
 }
@@ -24,6 +25,11 @@ impl RamController<'_> {
             foobar: vec![]
         }
     }
+
+    pub(crate) fn read8x(&self, address: &AbsoluteAddress) -> u8 {
+        0
+    }
+
     pub fn read8(&self, address: u16) -> u8 {
         let translated_address = self.translate_address(address);
 
@@ -45,6 +51,11 @@ impl RamController<'_> {
         self.memory[self.translate_address(address)] = value;
 
         self.write_ppu_registers(address, value)
+    }
+
+    pub(crate) fn write8x(&mut self, address: &AbsoluteAddress, value: u8) -> i32 {
+
+        -5000
     }
 
     pub(crate) fn load_prg_bank1(&mut self, rom: &PrgRomBank) {
