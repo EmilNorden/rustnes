@@ -150,7 +150,7 @@ impl<'a> PPU<'_> {
         let mut result = PPUResult::Ok;
 
         if self.scanline_cycle > 330 {
-            let foo = 3;
+            let _foo = 3;
         }
 
         if self.scanline < 240 || self.scanline == 261 {

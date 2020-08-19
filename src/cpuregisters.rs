@@ -1,5 +1,6 @@
+use crate::opcodes::{RelativeAddress, AbsoluteAddress};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct CPURegisters {
     accumulator: u8,
     x: u8,
@@ -13,7 +14,7 @@ pub struct CPURegisters {
     // 6 - (V) Overflow flag
     // 7 - (S) Sign flag
     status: u8,
-    pc: u16,
+    pc: AbsoluteAddress,
     stack: u16,
     pub rts_counter: u32,
 }
@@ -36,7 +37,7 @@ impl CPURegisters {
             x: 0,
             y: 0,
             status: 0b00100100, // Processor starts with interrupts disabled
-            pc: 0,
+            pc: AbsoluteAddress::from(0),
             stack: 0x01FD,
             rts_counter: 0
         }
@@ -58,7 +59,7 @@ impl CPURegisters {
         self.status
     }
 
-    pub fn pc(&self) -> u16 {
+    pub(crate) fn pc(&self) -> AbsoluteAddress {
         self.pc
     }
 
@@ -66,9 +67,9 @@ impl CPURegisters {
         self.stack
     }
 
-    pub fn increment_pc(&mut self) -> u16 {
+    pub(crate) fn increment_pc(&mut self) -> AbsoluteAddress {
         let pc = self.pc;
-        self.pc += 1;
+        self.pc = self.pc.offset_wrap(1);
 
         pc
     }
@@ -110,14 +111,20 @@ impl CPURegisters {
         self.set_flag_if(CPUFlags::Sign, (self.y & 0b10000000) == 0b10000000);
     }
 
-    pub fn set_pc(&mut self, value: u16) {
+    pub(crate) fn set_pc(&mut self, value: AbsoluteAddress) {
         self.pc = value;
     }
 
+    pub(crate) fn offset_pcx(&mut self, value: &RelativeAddress) -> bool {
+        //TODO Rewrite to remove this wrapper method
+        self.offset_pc(value.to_i8())
+    }
+
     pub fn offset_pc(&mut self, value: i8) -> bool {
-        let from_page = self.pc / 0x100;
-        self.pc = ((self.pc as i32) + value as i32) as u16;
-        let to_page = self.pc / 0x100;
+        let from_page = self.pc.high();
+        self.pc = self.pc.offset(value);
+        // self.pc = ((self.pc as i32) + value as i32) as u16;
+        let to_page = self.pc.high();
 
         return from_page != to_page; // True if we have crossed page boundaries
     }

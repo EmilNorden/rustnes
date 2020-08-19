@@ -22,12 +22,16 @@ impl RamController<'_> {
             ppu_regs,
             vram,
             memory: [0; 0x10000],
-            foobar: vec![]
+            foobar: vec![],
         }
     }
 
     pub(crate) fn read8x(&self, address: &AbsoluteAddress) -> u8 {
-        0
+        let translated_address = self.translate_address(address.to_u16());
+
+        self.read_ppu_registers(address.to_u16())
+            .or(self.read_apu_registers(address.to_u16()))
+            .unwrap_or(self.memory[translated_address])
     }
 
     pub fn read8(&self, address: u16) -> u8 {
@@ -54,8 +58,9 @@ impl RamController<'_> {
     }
 
     pub(crate) fn write8x(&mut self, address: &AbsoluteAddress, value: u8) -> i32 {
+        self.memory[self.translate_address(address.to_u16())] = value;
 
-        -5000
+        self.write_ppu_registers(address.to_u16(), value)
     }
 
     pub(crate) fn load_prg_bank1(&mut self, rom: &PrgRomBank) {
@@ -88,6 +93,16 @@ impl RamController<'_> {
         address as usize
     }
 
+    fn read_apu_registers(&self, address: u16) -> Option<u8> {
+        // Just dummy reads for now
+        match address {
+            0x4000..=0x4013 => Some(0xFF),
+            0x4015 => Some(0xFF),
+            0x4017 => Some(0xFF),
+            _ => None
+        }
+    }
+
     fn read_ppu_registers(&self, address: u16) -> Option<u8> {
         match address {
             0x2002 => {
@@ -95,10 +110,10 @@ impl RamController<'_> {
                 let status = ppu_regs.status();
                 self.ppu_regs.set(ppu_regs);
                 Some(status)
-            },
+            }
             0x2004 => {
                 Some(self.vram.borrow().read8(address))
-            },
+            }
             0x2007 => {
                 let mut regs = self.ppu_regs.get();
                 let ppuaddr = regs.ppuaddr();
@@ -132,7 +147,7 @@ impl RamController<'_> {
                 self.ppu_regs.set(regs);
 
                 0
-            },
+            }
             0x2004 => {
                 let mut regs = self.ppu_regs.get();
                 self.vram.borrow_mut().write_oam(regs.oamaddr(), value);
@@ -169,7 +184,7 @@ impl RamController<'_> {
             }
             0x4014 => {
                 let cpu_page_address = (value as usize) << 8;
-                let cpu_page= &self.memory[cpu_page_address..(cpu_page_address + 0xFF)];
+                let cpu_page = &self.memory[cpu_page_address..(cpu_page_address + 0xFF)];
 
                 self.vram.borrow_mut().write_oam_dma(self.ppu_regs.get().oamaddr(), cpu_page);
 

@@ -10,7 +10,7 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use crate::texture::Texture;
 use crate::renderer_gl::{Shader, Program};
-use std::io::{self, Write};
+use crate::opcodes::AbsoluteAddress;
 
 mod cpu;
 mod cpuregisters;
@@ -116,7 +116,7 @@ fn main()
     // let c = Cartridge::load("../../roms/nestest.nes");
     // let c = Cartridge::load("/Users/emil/code/rustnes/roms/Balloon Fight (E).nes");
     let c = Cartridge::load("/Users/emil/code/rustnes/roms/Donkey_Kong_JU.nes");
-    // let c = Cartridge::load("/Users/emil/code/rustnes/roms/nestest.nes");
+    //let c = Cartridge::load("/Users/emil/code/rustnes/roms/nestest.nes");
     // let c = Cartridge::load("/Users/emil/code/rustnes/roms/full_palette.nes");
 
     if c.prg_rom_banks().len() > 1 {
@@ -140,7 +140,6 @@ fn main()
     cpu.reset();
 
     let mut total_cycles = 7;
-    let mut should_break = false;
 
     let mut event_pump = sdl.event_pump().unwrap();
 
@@ -149,7 +148,7 @@ fn main()
     let mut iteration = 0;
 
 
-    // ppu.process(total_cycles * 3);
+    ppu.process(total_cycles * 3);
 
     'running: loop {
         iteration += 1;
@@ -166,15 +165,16 @@ fn main()
             }
         }
 
+        print!("{:04X}  ", cpu.registers.pc().to_u16());
+        let mut should_break = false;
+        if cpu.registers.pc() == AbsoluteAddress::from(0xC66E) {
+            should_break = true;
+        }
+        if cpu.registers.pc() == AbsoluteAddress::from(0xC68B) {
+            let _fdfdf=4;
+        }
         let op = cpu.decode();
-        cpu.process(op);
-
-        /*print!("{:04X}  ", cpu.registers.pc());
-        io::stdout().flush().unwrap();
-        let regs_copy = cpu.registers.clone();
-
-        let cycles = cpu.process_instruction();
-        io::stdout().flush().unwrap();
+        let cycles = cpu.process(op);
 
         let pixel = ppu.pixel();
         let scanline = ppu.scanline();
@@ -183,16 +183,14 @@ fn main()
             cpu.trigger_nmi();
         }
 
-        print!("A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X} PPU:{: >3},{: >3} CYC:{}",
-               regs_copy.accumulator(), regs_copy.x(), regs_copy.y(), regs_copy.status(),
-               regs_copy.stack() & 0xFF, pixel, scanline, total_cycles);
-        total_cycles += cycles;
-        println!();
-        io::stdout().flush().unwrap();
+        println!("PPU:{: >3},{: >3} CYC:{}", scanline, pixel, total_cycles);
 
-        if regs_copy.pc() == 0xC66E {
+        total_cycles += cycles;
+
+        if should_break {
             break 'running;
-        }*/
+        }
+
 
         if foo {
             foo = false;

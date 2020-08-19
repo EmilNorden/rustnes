@@ -1,6 +1,5 @@
 use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
-use std::error::Error;
+use std::io::{Read, Seek, SeekFrom};
 
 pub(crate) struct Cartridge {
     prg_rom_banks: Vec<PrgRomBank>,
