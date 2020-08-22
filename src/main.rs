@@ -148,7 +148,8 @@ fn main()
     let mut iteration = 0;
 
 
-    ppu.process(total_cycles * 3);
+    let mut powerup_finished = false;
+    // ppu.process(total_cycles * 3);
 
     'running: loop {
         iteration += 1;
@@ -173,6 +174,10 @@ fn main()
         if cpu.registers.pc() == AbsoluteAddress::from(0xC68B) {
             let _fdfdf=4;
         }
+
+        if total_cycles == 27396 {
+            let _dddd = 22;
+        }
         let op = cpu.decode();
         let cycles = cpu.process(op);
 
@@ -183,9 +188,16 @@ fn main()
             cpu.trigger_nmi();
         }
 
-        println!("PPU:{: >3},{: >3} CYC:{}", scanline, pixel, total_cycles);
+        println!("PPU:{: >3},{: >3} CYC:{}", pixel, scanline, total_cycles);
 
         total_cycles += cycles;
+
+        if !powerup_finished &&  total_cycles >= 29658 {
+            powerup_finished = true;
+            let mut regs = ppu_regs.get();
+            regs.set_powerup_state(false);
+            ppu_regs.set(regs);
+        }
 
         if should_break {
             break 'running;

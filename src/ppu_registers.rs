@@ -9,7 +9,8 @@ pub struct PPURegisters {
     ppuscroll_y: u8,
     ppustatus: u8,
     ppuscroll_toggle: bool,
-    ppuaddr_toggle: bool
+    ppuaddr_toggle: bool,
+    in_powerup_state: bool, // writes are ignored for first ~29658 CPU cycles. Applicable for PPUCTRL, PPUMASK, PPUSCROLL, PPUADDR
 }
 
 impl PPURegisters {
@@ -23,7 +24,8 @@ impl PPURegisters {
             ppuscroll_y: 0,
             ppustatus: 0,
             ppuscroll_toggle: false,
-            ppuaddr_toggle: false
+            ppuaddr_toggle: false,
+            in_powerup_state: true
         }
     }
 
@@ -33,13 +35,23 @@ impl PPURegisters {
     }
 
     pub fn set_ppuctrl(&mut self, value: u8) {
-        self.ppuctrl = value;
         self.set_last_written_value(value);
+
+        if self.in_powerup_state {
+            return
+        }
+
+        self.ppuctrl = value;
     }
 
     pub fn set_ppumask(&mut self, value: u8) {
-        self.ppumask = value;
         self.set_last_written_value(value);
+
+        if self.in_powerup_state {
+            return
+        }
+
+        self.ppumask = value;
     }
 
     pub fn set_oamaddr(&mut self, value: u8) {
@@ -48,6 +60,12 @@ impl PPURegisters {
     }
 
     pub fn set_ppuscroll(&mut self, value: u8) {
+        self.set_last_written_value(value);
+
+        if self.in_powerup_state {
+            return
+        }
+
         if self.ppuscroll_toggle {
             self.ppuscroll_y = value;
         }
@@ -56,10 +74,15 @@ impl PPURegisters {
         }
 
         self.ppuscroll_toggle = !self.ppuscroll_toggle;
-        self.set_last_written_value(value);
     }
 
     pub fn set_ppuaddr(&mut self, value: u8) {
+        self.set_last_written_value(value);
+
+        if self.in_powerup_state {
+            return
+        }
+
         if self.ppuaddr_toggle {
             self.ppuaddr = (self.ppuaddr & 0xFF00) | value as u16;
         }
@@ -68,7 +91,6 @@ impl PPURegisters {
         }
 
         self.ppuaddr_toggle = !self.ppuaddr_toggle;
-        self.set_last_written_value(value);
     }
 
     pub fn oamaddr(&self) -> u8 {
@@ -107,5 +129,9 @@ impl PPURegisters {
 
     pub fn should_generate_nmi(&self) -> bool {
         (self.ppuctrl & 0b10000000) == 0b10000000
+    }
+
+    pub fn set_powerup_state(&mut self, state: bool) {
+        self.in_powerup_state = state;
     }
 }

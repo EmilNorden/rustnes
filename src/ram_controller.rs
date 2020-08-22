@@ -105,6 +105,10 @@ impl RamController<'_> {
 
     fn read_ppu_registers(&self, address: u16) -> Option<u8> {
         match address {
+            0x2000 => {
+                Some(0xFF)  // 0x2000 is write-only, but Nintendulator reads from it and prints 0xFF in the debug output.
+                            // Added this to produce equal debug output
+            }
             0x2002 => {
                 let mut ppu_regs = self.ppu_regs.get();
                 let status = ppu_regs.status();

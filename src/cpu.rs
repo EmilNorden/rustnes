@@ -65,6 +65,66 @@ impl<'ctl, 'data: 'ctl> CPU<'ctl, 'data> {
         println!("ppuaddr end");
     }
 
+    /*pub(crate) fn decode2(&mut self) -> OpCode {
+        fn next_byte(cpu: &mut CPU) -> u8 {
+            cpu.memory.read8x(&cpu.registers.increment_pc())
+        }
+
+        fn next_short(cpu: &mut CPU) -> u16 {
+            let low = cpu.memory.read8x(&cpu.registers.increment_pc());
+            let high = cpu.memory.read8x(&cpu.registers.increment_pc());
+
+            low as u16 | ((high as u16) << 8)
+        }
+
+        let code = next_byte(self);
+
+        let opcode_index = code & 0b00000011;
+        let instruction_index = ((code & 0b11100000) >> 5) + (opcode_index * 8);
+        let addressing_mode_index = ((code & 0b00011100) >> 2) + (opcode_index * 8);
+
+
+        let instr_table = [
+            InstructionType::ORA,
+            InstructionType::AND,
+            InstructionType::EOR,
+            InstructionType::ADC,
+            InstructionType::STA,
+            InstructionType::LDA,
+            InstructionType::CMP,
+            InstructionType::SBC,
+
+            InstructionType::ASL,
+            InstructionType::ROL,
+            InstructionType::LSR,
+            InstructionType::ROR,
+            InstructionType::STX,
+            InstructionType::LDX,
+            InstructionType::DEC,
+            InstructionType::INC
+        ];
+
+        let instruction_type = instr_table[instruction_index];
+        let addressing_mode = match addressing_mode_index {
+            0 => AddressingMode::IndexedIndirect(ZeroPageAddress::from(next_byte(self))),
+            1 => AddressingMode::ZeroPage(ZeroPageAddress::from(next_byte(self))),
+            2 => AddressingMode::Immediate(AbsoluteAddress::from(next_short(self))),
+            3 => AddressingMode::Absolute(AbsoluteAddress::from(next_short(self))),
+            4 => AddressingMode::IndirectIndexed(ZeroPageAddress::from(next_byte(self))),
+            5 => AddressingMode::ZeroPageX(ZeroPageAddress::from(next_byte(self))),
+            6 => AddressingMode::AbsoluteY(AbsoluteAddress::from(next_short(self))),
+            7 => AddressingMode::AbsoluteX(AbsoluteAddress::from(next_short(self))),
+
+            8 => AddressingMode::Immediate(AbsoluteAddress::from(next_short(self))),
+            9 => AddressingMode::ZeroPage(ZeroPageAddress::from(next_byte(self))),
+            10 => AddressingMode::Accumulator,
+            11 => AddressingMode::Absolute(AbsoluteAddress::from(next_short(self))),
+            12 => AddressingMode::ZeroPageX(ZeroPageAddress::from(next_byte(self))),
+            13 => AddressingMode::AbsoluteX(AbsoluteAddress::from(next_short(self))),
+            _ => panic!("Unknown addressing mode index!")
+        };
+    }*/
+
     pub(crate) fn decode(&mut self) -> OpCode {
         fn next_byte(cpu: &mut CPU) -> u8 {
             cpu.memory.read8x(&cpu.registers.increment_pc())
